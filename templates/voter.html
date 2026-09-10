@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Live Poll</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        {% if message %}
+            <h1>{{ message }}</h1>
+        {% elif question %}
+            <h1 id="question-text">{{ question.text }}</h1>
+            <div id="options">
+                {% for option in question.options %}
+                    <button class="btn" onclick="vote('{{ question.id }}', {{ loop.index0 }})">{{ option }}</button>
+                {% endfor %}
+            </div>
+            <div id="message"></div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Client-side voter ID generation
+        function getOrCreateVoterId() {
+            let vid = localStorage.getItem('voter_id');
+            if (!vid) {
+                vid = crypto.randomUUID ? crypto.randomUUID() : 'voter-' + Math.random().toString(36).substring(2) + Date.now();
+                localStorage.setItem('voter_id', vid);
+            }
+            return vid;
+        }
+
+        const voter_id = getOrCreateVoterId();
+
+        // Check if user already voted in localStorage as a quick client-side check
+        const q_id = "{{ question.id if question else '' }}";
+        if (q_id && localStorage.getItem('voted_' + q_id)) {
+            showSuccess("You have already voted for this question. Look at the screen for results!");
+        }
+
+        async function vote(question_id, option_index) {
+            const buttons = document.querySelectorAll('.btn');
+            buttons.forEach(b => b.disabled = true);
+
+            try {
+                const response = await fetch('/vote', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question_id, option_index, voter_id })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('voted_' + question_id, 'true');
+                    showSuccess("Vote submitted successfully!");
+                } else {
+                    showError(data.error || "An error occurred.");
+                    buttons.forEach(b => b.disabled = false); // Re-enable if error
+                }
+            } catch (err) {
+                showError("Network error. Please try again.");
+                buttons.forEach(b => b.disabled = false);
+            }
+        }
+
+        function showSuccess(msg) {
+            const msgDiv = document.getElementById('message');
+            msgDiv.textContent = msg;
+            msgDiv.className = 'success';
+            document.getElementById('options').style.display = 'none';
+        }
+
+        function showError(msg) {
+            const msgDiv = document.getElementById('message');
+            msgDiv.textContent = msg;
+            msgDiv.className = 'error';
+        }
+    </script>
+</body>
+</html>

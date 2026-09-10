@@ -1,0 +1,17 @@
+[
+  {
+    "id": "q1",
+    "text": "How are you feeling about the event so far?",
+    "options": ["Amazing!", "Good", "Okay", "Could be better"]
+  },
+  {
+    "id": "q2",
+    "text": "What is your favorite programming language?",
+    "options": ["Python", "JavaScript", "Rust", "Go", "Java", "C++"]
+  },
+  {
+    "id": "q3",
+    "text": "Tabs or Spaces?",
+    "options": ["Tabs", "Spaces"]
+  }
+]

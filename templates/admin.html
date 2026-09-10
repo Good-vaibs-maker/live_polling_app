@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poll Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Admin Control Panel</h1>
+
+        {% if active_idx < questions|length %}
+            <p><strong>Current Question ({{ active_idx + 1 }}/{{ questions|length }}):</strong></p>
+            <h2 style="margin: 0.5rem 0 1.5rem 0;">{{ questions[active_idx].text }}</h2>
+            
+            <p>Scan to vote:</p>
+            <img src="{{ url_for('qr_code') }}" alt="QR Code to Vote URL" style="max-width: 250px; width: 100%; border-radius: 8px;">
+            <p><a href="{{ host }}" target="_blank">{{ host }}</a></p>
+            
+            <div class="admin-controls">
+                <form action="/admin/next" method="post" style="flex: 1;">
+                    <button type="submit" class="btn">Next Question</button>
+                </form>
+            </div>
+        {% else %}
+            <h2>Poll has ended!</h2>
+        {% endif %}
+
+        <div class="admin-controls" style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ccc;">
+            <form action="/admin/reset" method="post" style="flex: 1;" onsubmit="return confirm('Are you sure? This will delete all votes and start over.');">
+                <button type="submit" class="btn" style="background-color: #dc3545;">Reset Poll</button>
+            </form>
+            <a href="{{ url_for('results_page') }}" target="_blank" class="btn" style="background-color: #28a745; text-decoration: none;">Open Results Page</a>
+        </div>
+    </div>
+</body>
+</html>

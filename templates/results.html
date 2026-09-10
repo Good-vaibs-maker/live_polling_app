@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container" style="max-width: 800px;">
+        <h1 id="question-text">Waiting for poll to start...</h1>
+        <canvas id="resultsChart"></canvas>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('resultsChart').getContext('2d');
+        let chart = null;
+
+        async function fetchResults() {
+            try {
+                const response = await fetch('/api/results');
+                const data = await response.json();
+
+                if (data.status === 'ended') {
+                    document.getElementById('question-text').textContent = "Poll has ended!";
+                    if (chart) {
+                        chart.destroy();
+                        chart = null;
+                    }
+                    return;
+                }
+
+                document.getElementById('question-text').textContent = data.question_text;
+
+                if (!chart) {
+                    chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.labels,
+                            datasets: [{
+                                label: 'Votes',
+                                data: data.data,
+                                backgroundColor: '#007bff',
+                                borderRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            animation: { duration: 500 },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: { stepSize: 1 }
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false }
+                            }
+                        }
+                    });
+                } else {
+                    // Update data if labels are the same (same question)
+                    if (chart.data.labels.join() === data.labels.join()) {
+                        chart.data.datasets[0].data = data.data;
+                        chart.update('none'); // Update without full animation for smoother live updates
+                    } else {
+                        // Question changed, recreate chart
+                        chart.destroy();
+                        chart = null;
+                        fetchResults(); // Call immediately to recreate
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching results:", err);
+            }
+        }
+
+        // Poll every 1.5 seconds
+        setInterval(fetchResults, 1500);
+        fetchResults(); // Initial fetch
+    </script>
+</body>
+</html>

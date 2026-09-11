@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join the Poll</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #111;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2.5rem;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        #question-text {
+            font-size: clamp(2rem, 5vw, 4rem);
+            font-weight: 700;
+            line-height: 1.2;
+            max-width: 900px;
+            color: #fff;
+            min-height: 1.2em;
+        }
+
+        #question-text.waiting {
+            color: #888;
+            font-style: italic;
+        }
+
+        .qr-wrapper {
+            background: #fff;
+            border-radius: 16px;
+            padding: 1.25rem;
+            display: inline-block;
+            box-shadow: 0 0 40px rgba(255,255,255,0.15);
+        }
+
+        .qr-wrapper img {
+            display: block;
+            width: clamp(180px, 25vw, 320px);
+            height: auto;
+        }
+
+        #vote-count {
+            font-size: clamp(1.1rem, 2.5vw, 1.8rem);
+            color: #aaa;
+            min-height: 1.4em;
+        }
+
+        #vote-count span {
+            color: #4fc3f7;
+            font-weight: 700;
+        }
+
+        #join-url {
+            font-size: clamp(1rem, 2vw, 1.4rem);
+            color: #888;
+            letter-spacing: 0.04em;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div id="question-text" class="waiting">Waiting for poll to start…</div>
+
+    <div class="qr-wrapper">
+        <img src="/qr.png" alt="QR code to join">
+    </div>
+
+    <div id="vote-count"></div>
+    <div id="join-url"></div>
+
+    <script>
+        let currentQuestionId = null;
+
+        function setUrl() {
+            document.getElementById('join-url').textContent = window.location.origin + '/';
+        }
+        setUrl();
+
+        async function fetchState() {
+            try {
+                // Fetch current question
+                const qRes = await fetch('/api/voter/current');
+                const qData = await qRes.json();
+
+                const questionEl = document.getElementById('question-text');
+
+                if (qData.status === 'ended' || !qData.question) {
+                    if (currentQuestionId !== null) {
+                        currentQuestionId = null;
+                        questionEl.textContent = 'Poll has ended — thank you!';
+                        questionEl.className = 'waiting';
+                        document.getElementById('vote-count').innerHTML = '';
+                    }
+                    return;
+                }
+
+                const q = qData.question;
+
+                if (currentQuestionId !== q.id) {
+                    currentQuestionId = q.id;
+                    questionEl.textContent = q.text;
+                    questionEl.className = '';
+                }
+
+                // Fetch live vote count for current question
+                const rRes = await fetch('/api/results');
+                const rData = await rRes.json();
+                if (rData.status === 'active' && rData.data) {
+                    const total = rData.data.reduce((a, b) => a + b, 0);
+                    document.getElementById('vote-count').innerHTML =
+                        `<span>${total}</span> vote${total !== 1 ? 's' : ''} received`;
+                }
+            } catch (err) {
+                console.error('Error fetching state:', err);
+            }
+        }
+
+        setInterval(fetchState, 2000);
+        fetchState();
+    </script>
+</body>
+</html>

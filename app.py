@@ -146,6 +146,10 @@ def vote():
 def results_page():
     return render_template('results.html')
 
+@app.route('/join')
+def join_page():
+    return render_template('join.html')
+
 @app.route('/api/results')
 def api_results():
     active_id = get_active_question_id()

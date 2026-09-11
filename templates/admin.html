@@ -5,34 +5,295 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Poll Admin</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .admin-layout { display: flex; flex-wrap: wrap; gap: 2rem; justify-content: center; }
+        .panel { flex: 1; min-width: 300px; background: #fff; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .q-item { border: 1px solid #ddd; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; position: relative; }
+        .q-item.active { border-color: #28a745; box-shadow: 0 0 5px rgba(40, 167, 69, 0.5); }
+        .q-item .controls { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .btn-small { padding: 0.5rem; font-size: 0.9rem; margin: 0; flex: 1; }
+        .btn-activate { background-color: #28a745; color: white; border: none; padding: 0.5rem; border-radius: 8px; cursor: pointer; }
+        .btn-activate:hover { background-color: #218838; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal-content { background: #fff; padding: 2rem; border-radius: 12px; width: 90%; max-width: 500px; }
+        .option-input { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .option-input input { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+        .option-input button { background: #dc3545; color: #fff; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer; }
+        input[type="text"] { width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;}
+    </style>
 </head>
-<body>
-    <div class="container">
-        <h1>Admin Control Panel</h1>
-
-        {% if active_idx < questions|length %}
-            <p><strong>Current Question ({{ active_idx + 1 }}/{{ questions|length }}):</strong></p>
-            <h2 style="margin: 0.5rem 0 1.5rem 0;">{{ questions[active_idx].text }}</h2>
-            
-            <p>Scan to vote:</p>
-            <img src="{{ url_for('qr_code') }}" alt="QR Code to Vote URL" style="max-width: 250px; width: 100%; border-radius: 8px;">
-            <p><a href="{{ host }}" target="_blank">{{ host }}</a></p>
-            
-            <div class="admin-controls">
-                <form action="/admin/next" method="post" style="flex: 1;">
-                    <button type="submit" class="btn">Next Question</button>
-                </form>
+<body style="background: #f4f4f9;">
+    <div style="padding: 2rem;">
+        <h1 style="text-align: center;">Admin Control Panel</h1>
+        
+        <div class="admin-layout">
+            <!-- Left panel: Current state -->
+            <div class="panel">
+                <h2 id="current-q-header">Current Question</h2>
+                <div id="current-q-text" style="font-size: 1.2rem; margin: 1rem 0; min-height: 2rem;">Loading...</div>
+                
+                <p>Scan to vote:</p>
+                <img src="{{ url_for('qr_code') }}" alt="QR Code" style="max-width: 250px; width: 100%; border-radius: 8px; display: block; margin: 0 auto;">
+                <p style="text-align: center;"><a href="{{ host }}" target="_blank">{{ host }}</a></p>
+                
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button class="btn" onclick="nextQuestion()">Next Question (in sequence)</button>
+                </div>
+                
+                <hr style="margin: 2rem 0;">
+                
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <form action="/admin/reset" method="post" onsubmit="return confirm('Reset all votes and jump to the first question?');" style="flex: 1;">
+                        <button type="submit" class="btn btn-danger">Reset Poll</button>
+                    </form>
+                    <a href="{{ url_for('results_page') }}" target="_blank" class="btn" style="background-color: #28a745; text-decoration: none; text-align: center;">Open Results Page</a>
+                </div>
             </div>
-        {% else %}
-            <h2>Poll has ended!</h2>
-        {% endif %}
-
-        <div class="admin-controls" style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ccc;">
-            <form action="/admin/reset" method="post" style="flex: 1;" onsubmit="return confirm('Are you sure? This will delete all votes and start over.');">
-                <button type="submit" class="btn" style="background-color: #dc3545;">Reset Poll</button>
-            </form>
-            <a href="{{ url_for('results_page') }}" target="_blank" class="btn" style="background-color: #28a745; text-decoration: none;">Open Results Page</a>
+            
+            <!-- Right panel: Manage questions -->
+            <div class="panel">
+                <h2>Manage Questions</h2>
+                <button class="btn" style="margin-bottom: 1rem;" onclick="openModal()">+ Add New Question</button>
+                
+                <div id="questions-list">
+                    <!-- Loaded dynamically -->
+                </div>
+            </div>
         </div>
     </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Edit Question</h2>
+            <input type="hidden" id="edit-id">
+            <label>Question Text:</label>
+            <input type="text" id="edit-text" placeholder="Enter question">
+            
+            <label>Options:</label>
+            <div id="edit-options"></div>
+            
+            <button class="btn btn-secondary btn-small" onclick="addOptionField()" style="margin-bottom: 1rem; width: auto;">+ Add Option</button>
+            
+            <div style="display: flex; gap: 1rem;">
+                <button class="btn" onclick="saveQuestion()">Save</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let questionsData = [];
+        let activeId = "";
+
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/questions');
+                const data = await res.json();
+                questionsData = data.questions;
+                activeId = data.active_question_id;
+                renderQuestions();
+                renderCurrent();
+            } catch (err) {
+                console.error("Failed to fetch questions", err);
+            }
+        }
+
+        function renderCurrent() {
+            const currentQ = questionsData.find(q => q.id === activeId);
+            const header = document.getElementById('current-q-header');
+            const text = document.getElementById('current-q-text');
+            
+            if (currentQ) {
+                const idx = questionsData.findIndex(q => q.id === activeId);
+                header.textContent = `Current Question (${idx + 1}/${questionsData.length})`;
+                text.textContent = currentQ.text;
+            } else {
+                header.textContent = "Poll Ended / No Active Question";
+                text.textContent = "";
+            }
+        }
+
+        function renderQuestions() {
+            const list = document.getElementById('questions-list');
+            list.innerHTML = '';
+            
+            questionsData.forEach((q, idx) => {
+                const isFirst = idx === 0;
+                const isLast = idx === questionsData.length - 1;
+                const isActive = q.id === activeId;
+                
+                const div = document.createElement('div');
+                div.className = `q-item ${isActive ? 'active' : ''}`;
+                
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between;">
+                        <strong>${idx + 1}. ${q.text}</strong>
+                        ${isActive ? '<span style="color: #28a745; font-weight: bold; font-size: 0.8rem; background: #e8f5e9; padding: 2px 6px; border-radius: 4px;">LIVE</span>' : ''}
+                    </div>
+                    <ul style="margin: 0.5rem 0 0 1.5rem; font-size: 0.9rem; padding: 0;">
+                        ${q.options.map(o => `<li>${o}</li>`).join('')}
+                    </ul>
+                    <div class="controls">
+                        <button class="btn btn-small btn-activate" onclick="activateQuestion('${q.id}')">Activate Now</button>
+                        <button class="btn btn-small btn-secondary" onclick="moveQuestion(${idx}, -1)" ${isFirst ? 'disabled' : ''}>&uarr;</button>
+                        <button class="btn btn-small btn-secondary" onclick="moveQuestion(${idx}, 1)" ${isLast ? 'disabled' : ''}>&darr;</button>
+                        <button class="btn btn-small" onclick="openModal('${q.id}')">Edit</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteQuestion('${q.id}')">Delete</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        async function nextQuestion() {
+            await fetch('/api/questions/next', { method: 'POST' });
+            fetchData();
+        }
+
+        async function activateQuestion(id) {
+            await fetch(`/api/questions/${id}/activate`, { method: 'POST' });
+            fetchData();
+        }
+
+        async function moveQuestion(idx, dir) {
+            const newIdx = idx + dir;
+            if (newIdx < 0 || newIdx >= questionsData.length) return;
+            
+            // Swap in array
+            const temp = questionsData[idx];
+            questionsData[idx] = questionsData[newIdx];
+            questionsData[newIdx] = temp;
+            
+            // Save new order to backend
+            const ordered_ids = questionsData.map(q => q.id);
+            await fetch('/api/questions/reorder', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ ordered_ids })
+            });
+            fetchData();
+        }
+
+        async function deleteQuestion(id) {
+            if (!confirm('Are you sure you want to delete this question?')) return;
+            
+            await fetch(`/api/questions/${id}`, { method: 'DELETE' });
+            fetchData();
+        }
+
+        // --- Modal Logic ---
+
+        function openModal(id = null) {
+            const modal = document.getElementById('editModal');
+            const title = document.getElementById('modal-title');
+            const idInput = document.getElementById('edit-id');
+            const textInput = document.getElementById('edit-text');
+            const optionsDiv = document.getElementById('edit-options');
+            
+            optionsDiv.innerHTML = '';
+            
+            if (id) {
+                // Edit existing
+                const q = questionsData.find(q => q.id === id);
+                title.textContent = 'Edit Question';
+                idInput.value = id;
+                textInput.value = q.text;
+                q.options.forEach(opt => addOptionField(opt));
+            } else {
+                // Create new
+                title.textContent = 'Add New Question';
+                idInput.value = '';
+                textInput.value = '';
+                addOptionField();
+                addOptionField();
+            }
+            
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function addOptionField(value = '') {
+            const optionsDiv = document.getElementById('edit-options');
+            if (optionsDiv.children.length >= 6) return;
+            
+            const div = document.createElement('div');
+            div.className = 'option-input';
+            div.innerHTML = `
+                <input type="text" value="${value.replace(/"/g, '&quot;')}" placeholder="Option text">
+                <button type="button" onclick="this.parentElement.remove(); checkOptionCount();">X</button>
+            `;
+            optionsDiv.appendChild(div);
+            checkOptionCount();
+        }
+
+        function checkOptionCount() {
+            const optionsDiv = document.getElementById('edit-options');
+            const btns = optionsDiv.querySelectorAll('button');
+            if (optionsDiv.children.length <= 2) {
+                btns.forEach(b => b.disabled = true);
+            } else {
+                btns.forEach(b => b.disabled = false);
+            }
+        }
+
+        async function saveQuestion() {
+            const id = document.getElementById('edit-id').value;
+            const text = document.getElementById('edit-text').value.trim();
+            const optionInputs = document.getElementById('edit-options').querySelectorAll('input');
+            const options = Array.from(optionInputs).map(inp => inp.value.trim()).filter(v => v);
+            
+            if (!text) return alert("Question text is required.");
+            if (options.length < 2 || options.length > 6) return alert("You must have between 2 and 6 options.");
+            
+            // If editing active question, check votes
+            if (id && id === activeId) {
+                try {
+                    const res = await fetch(`/api/questions/${id}/votes/count`);
+                    const data = await res.json();
+                    if (data.count > 0) {
+                        if (!confirm(`WARNING: This question is LIVE and already has ${data.count} votes. Changing its options may invalidate existing results. Proceed?`)) {
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            const payload = { text, options };
+            let url = '/api/questions';
+            let method = 'POST';
+            
+            if (id) {
+                url = `/api/questions/${id}`;
+                method = 'PUT';
+            }
+            
+            const res = await fetch(url, {
+                method,
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await res.json();
+            if (data.error) {
+                alert(data.error);
+            } else {
+                closeModal();
+                fetchData();
+            }
+        }
+
+        // Initialize
+        fetchData();
+    </script>
 </body>
 </html>

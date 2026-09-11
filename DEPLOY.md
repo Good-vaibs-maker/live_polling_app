@@ -23,7 +23,8 @@ The instructions below focus on Render.
 
 ### 1. Ephemeral Filesystem (Data Reset)
 On Render and Railway free tiers, the filesystem is **ephemeral**. This means every time the service restarts or redeploys, all files are reset to their original state in the Git repository. 
-Because this app uses a single SQLite file (`poll.db`) for simplicity, **all votes and polling data will be lost upon restart or redeploy**.
+Because this app uses a single SQLite file (`poll.db`) for simplicity, **all votes, polling data, and live question edits will be lost upon restart or redeploy**.
+The database will re-seed itself from `questions.json` on the next start.
 *This is perfectly fine for a single live event*, provided you do not trigger a manual deploy or restart mid-show.
 
 ### 2. Cold Starts (Sleeping)

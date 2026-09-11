@@ -8,17 +8,9 @@
 </head>
 <body>
     <div class="container">
-        {% if message %}
-            <h1>{{ message }}</h1>
-        {% elif question %}
-            <h1 id="question-text">{{ question.text }}</h1>
-            <div id="options">
-                {% for option in question.options %}
-                    <button class="btn" onclick="vote('{{ question.id }}', {{ loop.index0 }})">{{ option }}</button>
-                {% endfor %}
-            </div>
-            <div id="message"></div>
-        {% endif %}
+        <h1 id="question-text">Waiting for poll...</h1>
+        <div id="options"></div>
+        <div id="message"></div>
     </div>
 
     <script>
@@ -33,11 +25,59 @@
         }
 
         const voter_id = getOrCreateVoterId();
+        let currentQuestionId = null;
 
-        // Check if user already voted in localStorage as a quick client-side check
-        const q_id = "{{ question.id if question else '' }}";
-        if (q_id && localStorage.getItem('voted_' + q_id)) {
-            showSuccess("You have already voted for this question. Look at the screen for results!");
+        async function fetchCurrentQuestion() {
+            try {
+                const response = await fetch('/api/voter/current');
+                const data = await response.json();
+
+                if (data.status === 'ended' || !data.question) {
+                    if (currentQuestionId !== 'ended') {
+                        currentQuestionId = 'ended';
+                        document.getElementById('question-text').textContent = "Poll has ended! Look at the screen for results.";
+                        document.getElementById('options').innerHTML = '';
+                        document.getElementById('message').textContent = '';
+                        document.getElementById('message').className = '';
+                    }
+                    return;
+                }
+
+                if (currentQuestionId !== data.question.id) {
+                    // Question has changed!
+                    currentQuestionId = data.question.id;
+                    renderQuestion(data.question);
+                }
+            } catch (err) {
+                console.error("Error fetching current question", err);
+            }
+        }
+
+        function renderQuestion(q) {
+            document.getElementById('question-text').textContent = q.text;
+            
+            const optionsDiv = document.getElementById('options');
+            optionsDiv.innerHTML = '';
+            
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = '';
+            messageDiv.className = '';
+
+            // Check if already voted for this new question
+            if (localStorage.getItem('voted_' + q.id)) {
+                optionsDiv.style.display = 'none';
+                showSuccess("You have already voted for this question. Look at the screen for results!");
+                return;
+            }
+
+            optionsDiv.style.display = 'block';
+            q.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.textContent = opt;
+                btn.onclick = () => vote(q.id, idx);
+                optionsDiv.appendChild(btn);
+            });
         }
 
         async function vote(question_id, option_index) {
@@ -47,9 +87,7 @@
             try {
                 const response = await fetch('/vote', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ question_id, option_index, voter_id })
                 });
 
@@ -60,7 +98,12 @@
                     showSuccess("Vote submitted successfully!");
                 } else {
                     showError(data.error || "An error occurred.");
-                    buttons.forEach(b => b.disabled = false); // Re-enable if error
+                    if (response.status !== 409) {
+                        buttons.forEach(b => b.disabled = false); // Re-enable if non-duplicate error
+                    } else {
+                        // Was a duplicate vote (maybe voted on another tab)
+                        localStorage.setItem('voted_' + question_id, 'true');
+                    }
                 }
             } catch (err) {
                 showError("Network error. Please try again.");
@@ -80,6 +123,10 @@
             msgDiv.textContent = msg;
             msgDiv.className = 'error';
         }
+
+        // Poll every 2 seconds
+        setInterval(fetchCurrentQuestion, 2000);
+        fetchCurrentQuestion(); // Initial fetch
     </script>
 </body>
 </html>
